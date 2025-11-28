@@ -1,4 +1,4 @@
-package pt.ipt.dam2025.travelphoto.Fragmentos
+package pt.ipt.dam2025.travelphoto.fragmentos
 
 import android.os.Bundle
 import androidx.fragment.app.Fragment
