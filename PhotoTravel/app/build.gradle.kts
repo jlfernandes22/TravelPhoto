@@ -4,13 +4,13 @@ plugins {
 }
 
 android {
-    namespace = "pt.ipt.dam2025.travelphoto"
+    namespace = "pt.ipt.dam2025.phototravel"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "pt.ipt.dam2025.travelphoto"
+        applicationId = "pt.ipt.dam2025.phototravel"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -38,6 +38,8 @@ android {
 }
 
 dependencies {
+    // Dependencia para usar MapLibre
+    implementation("org.maplibre.gl:android-sdk:12.2.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
