@@ -1,86 +1,150 @@
 package pt.ipt.dam2025.phototravel.fragmentos
 
+
 import android.Manifest
-import android.app.Activity
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.os.Bundle
+import android.content.ContentValues
+import android.os.Build
 import android.provider.MediaStore
+import java.text.SimpleDateFormat
+import java.util.Locale
+import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.ImageView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import pt.ipt.dam2025.phototravel.R
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+
+
 
 class CamaraFragmento : Fragment() {
 
-    private var button: Button? = null
-    private var imageView: ImageView? = null
+    private var imageCapture: ImageCapture? = null
+    private lateinit var cameraExecutor: ExecutorService
 
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_camara, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        button = view.findViewById(R.id.button)
-        imageView = view.findViewById(R.id.imageView)
+        // Pede permissão e, se concedida, inicia a câmara
+        verificarPermissaoEIniciarCamara()
 
-        button?.setOnClickListener {
-            verificarPermissaoEAbrirCamara()
-        }
+        //  listener do botão de tirar foto
+        view.findViewById<Button>(R.id.image_capture_button).setOnClickListener { tirarFoto() }
+
+        cameraExecutor = Executors.newSingleThreadExecutor()
     }
 
-    // Função que verifica se já temos permissão
-    private fun verificarPermissaoEAbrirCamara() {
+    private fun verificarPermissaoEIniciarCamara() {
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            // Se já tem permissão, abre a câmara
-            abrirCamara()
+            iniciarCamara()
         } else {
-            // Se não tem, pede permissão ao utilizador
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
-    // Lançador para pedir a permissão (janela do sistema "Permitir que app use a câmara?")
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
-            abrirCamara()
+            iniciarCamara()
         } else {
-            Toast.makeText(context, "É necessário permitir a câmara para tirar fotos.", Toast.LENGTH_LONG).show()
+            Toast.makeText(requireContext(), "É necessário dar permissão à câmara para tirar fotos.", Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun abrirCamara() {
-        val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-        try {
-            resultLauncher.launch(cameraIntent)
-        } catch (e: Exception) {
-            // Este bloco evita que a app vá para uma "página branca" (crash) se não houver app de câmara
-            e.printStackTrace()
-            Toast.makeText(context, "Erro ao abrir a câmara: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
+    private fun iniciarCamara() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
+
+        cameraProviderFuture.addListener({
+            val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+
+            // pré-visualização
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(view?.findViewById<PreviewView>(R.id.viewFinder)?.surfaceProvider)
+            }
+
+            imageCapture = ImageCapture.Builder().build()
+
+            // Seleciona a câmara traseira (default)
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+            try {
+                // Desvincula tudo antes de vincular novamente
+                cameraProvider.unbindAll()
+
+                // Vincula os casos de uso (preview, captura) ao ciclo de vida do fragmento
+                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture)
+
+            } catch(exc: Exception) {
+                Log.e("CamaraFragmento", "Falha ao vincular casos de uso", exc)
+            }
+
+        }, ContextCompat.getMainExecutor(requireContext()))
     }
 
-    // Recebe a foto tirada
-    private var resultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data: Intent? = result.data
-            // Recupera a imagem pequena (thumbnail)
-            val imageBitmap = data?.extras?.get("data") as? Bitmap
-            imageView?.setImageBitmap(imageBitmap)
+    private fun tirarFoto() {
+        val imageCapture = imageCapture ?: return // Se a captura não estiver pronta, sai
+
+        // Cria um nome para o ficheiro
+        val name = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
+            .format(System.currentTimeMillis())
+
+        // Define os metadados da imagem para a galeria
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PhotoTravel")
+            }
         }
+
+        // Cria o objeto de opções de saída, especificando onde guardar o ficheiro
+        val outputOptions = ImageCapture.OutputFileOptions
+            .Builder(
+                requireContext().contentResolver,
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                contentValues
+            )
+            .build()
+
+        // Tira a foto com as opções definidas
+        imageCapture.takePicture(
+            outputOptions,
+            ContextCompat.getMainExecutor(requireContext()),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onError(exc: ImageCaptureException) {
+                    Log.e("CamaraFragmento", "Erro ao tirar a foto: ${exc.message}", exc)
+                    Toast.makeText(requireContext(), "Erro ao guardar a foto.", Toast.LENGTH_SHORT).show()
+                }
+
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    val msg = "Foto guardada com sucesso: ${output.savedUri}"
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                    Log.d("CamaraFragmento", msg)
+                }
+            }
+        )
+    } // A função tirarFoto termina AQUI
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        cameraExecutor.shutdown()
     }
 }
