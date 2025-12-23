@@ -72,6 +72,7 @@ dependencies {
     //para poder ler e transformar json
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("androidx.fragment:fragment-ktx:1.8.1")
+    implementation("com.google.android.gms:play-services-location:21.0.1")
     // Dependências da CameraX
     val camerax_version = "1.3.1"
     implementation("androidx.camera:camera-core:${camerax_version}")

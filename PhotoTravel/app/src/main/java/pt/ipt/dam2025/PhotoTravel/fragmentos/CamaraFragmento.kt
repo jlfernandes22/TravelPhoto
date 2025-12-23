@@ -4,6 +4,7 @@ package pt.ipt.dam2025.phototravel.fragmentos
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.ContentValues
+import android.location.Location
 import android.os.Build
 import android.provider.MediaStore
 import java.text.SimpleDateFormat
@@ -25,6 +26,10 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import pt.ipt.dam2025.PhotoTravel.FotoDados
 import pt.ipt.dam2025.PhotoTravel.PartilhaDadosViewModel
 import pt.ipt.dam2025.phototravel.R
@@ -40,6 +45,8 @@ class CamaraFragmento : Fragment() {
 
     private val viewModel: PartilhaDadosViewModel by activityViewModels()
 
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_camara, container, false)
     }
@@ -50,14 +57,20 @@ class CamaraFragmento : Fragment() {
         // listener do botão de tirar foto
         view.findViewById<ImageButton>(R.id.image_capture_button).setOnClickListener { tirarFoto() }
 
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
+
+
         cameraExecutor = Executors.newSingleThreadExecutor()
     }
 
 
     private fun verificarPermissaoEIniciarCamara() {
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            iniciarCamara()
+            if(ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                iniciarCamara()
+            } //TODO: pensar numa melhor implementação
         } else {
+            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
@@ -152,22 +165,37 @@ class CamaraFragmento : Fragment() {
                     Toast.makeText(requireContext(), "Erro ao guardar a foto.", Toast.LENGTH_SHORT).show()
                 }
 
+
+
+
+
                 /**
                  * Função para avisar que a foto foi guardada com sucesso
                  * E também para criar um objeto FotoDados para guardar os dados da foto
                  */
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val msg = "Foto guardada com sucesso: ${output.savedUri}"
-                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
-                    Log.d("CamaraFragmento", msg)
-                    val novaFoto = FotoDados(
-                        uriString = output.savedUri.toString(),
-                        titulo = name,
-                        data = name,
-                        latitude = 0.0, //TODO: adicionar a informação da localização
-                        longitude = 0.0 //TODO: adicionar a informação da localização
-                    )
-                    viewModel.adicionarFotos(novaFoto)
+                    val uri = output.savedUri ?: return
+
+
+                    if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
+                            .addOnSuccessListener { location: Location? ->
+                                val novaFoto = FotoDados(
+                                    uriString = uri.toString(),
+                                    titulo = name,
+                                    data = name,
+                                    latitude = location?.latitude ?: 0.0,
+                                    longitude = location?.longitude ?: 0.0
+                                )
+                                viewModel.adicionarFotos(novaFoto)
+                                Toast.makeText(requireContext(), "Foto guardada com localização!", Toast.LENGTH_SHORT).show()
+                            }
+                    } else {
+
+                        val novaFoto = FotoDados(uri.toString(), name, name, 0.0, 0.0)
+                        viewModel.adicionarFotos(novaFoto)
+                        Toast.makeText(requireContext(), "Foto guardada (sem GPS).", Toast.LENGTH_SHORT).show()
+                    }
 
                 }
             }

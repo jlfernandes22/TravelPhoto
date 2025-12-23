@@ -99,7 +99,7 @@ class MapaFragmento : Fragment() {
 
                             pinManager.create(
                                 SymbolOptions()
-                                    .withLatLng(LatLng(foto.longitude,foto.latitude))
+                                    .withLatLng(LatLng(foto.latitude,foto.longitude))
                                     .withIconImage(idImagem)
                                     .withIconSize(0.5f)
                             )
