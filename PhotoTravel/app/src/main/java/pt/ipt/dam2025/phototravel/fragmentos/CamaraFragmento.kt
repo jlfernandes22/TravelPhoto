@@ -10,12 +10,14 @@ import android.provider.MediaStore
 import java.text.SimpleDateFormat
 import java.util.Locale
 import android.os.Bundle
+import android.os.Looper
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -26,12 +28,16 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationSettingsRequest
 import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
-import pt.ipt.dam2025.phototravel.FotoDados
-import pt.ipt.dam2025.phototravel.PartilhaDadosViewModel
+import pt.ipt.dam2025.phototravel.modelos.FotoDados
+import pt.ipt.dam2025.phototravel.viewmodel.PartilhaDadosViewModel
 import pt.ipt.dam2025.phototravel.R
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -47,6 +53,46 @@ class CamaraFragmento : Fragment() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
+    private var ultimaLocal: Location? = null
+
+    private val locationCallback = object : LocationCallback(){
+        override fun onLocationResult(result: LocationResult) {
+            ultimaLocal = result.lastLocation
+            Log.d("GPS", "Localização atualizada")
+        }
+    }
+
+    private val gpsAtivo = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            // O utilizador aceitou ligar o GPS! Iniciamos o rastreio.
+            rastrearGPS()
+        } else {
+            // O utilizador recusou.
+            Toast.makeText(requireContext(), "GPS necessário para guardar localização nas fotos.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val cameraGranted = permissions[Manifest.permission.CAMERA] ?: false
+        val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+
+        if (cameraGranted) {
+            iniciarCamara()
+        } else {
+            Toast.makeText(requireContext(), "É necessário dar permissão à câmara para tirar fotos.", Toast.LENGTH_LONG).show()
+        }
+
+        if (locationGranted) {
+            verificarGpsRastrear()
+        }
+    }
+
+
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_camara, container, false)
     }
@@ -59,31 +105,32 @@ class CamaraFragmento : Fragment() {
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
 
-
         cameraExecutor = Executors.newSingleThreadExecutor()
     }
 
-
+    /**
+     * Função para verificar as permissões e caso fornecidas iniciar a camara
+     */
     private fun verificarPermissaoEIniciarCamara() {
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            if(ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                iniciarCamara()
-            } //TODO: pensar numa melhor implementação
-        } else {
-            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        val cameraP = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val locationP = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+        if (cameraP) {
+            iniciarCamara()
+        }
+        
+        if (locationP) {
+            verificarGpsRastrear()
+        }
+
+        if (!cameraP || !locationP) {
+            requestPermissionLauncher.launch(arrayOf(
+                Manifest.permission.CAMERA,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ))
         }
     }
 
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        if (isGranted) {
-            iniciarCamara()
-        } else {
-            Toast.makeText(requireContext(), "É necessário dar permissão à câmara para tirar fotos.", Toast.LENGTH_LONG).show()
-        }
-    }
 
     /**
      *Função para iniciar a câmara
@@ -168,53 +215,99 @@ class CamaraFragmento : Fragment() {
                     Toast.makeText(requireContext(), "Erro ao guardar a foto.", Toast.LENGTH_SHORT).show()
                 }
 
-
-
-
-
-                /**
-                 * Função para avisar que a foto foi guardada com sucesso
-                 * E também para criar um objeto FotoDados para guardar os dados da foto
-                 */
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                     val uri = output.savedUri ?: return
 
-
-                    if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
-                            .addOnSuccessListener { location: Location? ->
-                                val novaFoto = FotoDados(
-                                    uriString = uri.toString(),
-                                    titulo = name,
-                                    data = dataDia,
-                                    latitude = location?.latitude ?: 0.0,
-                                    longitude = location?.longitude ?: 0.0
-                                )
-                                viewModel.adicionarFotos(novaFoto)
-                                Toast.makeText(requireContext(), "Foto guardada com localização!", Toast.LENGTH_SHORT).show()
-                            }
+                    if (ultimaLocal != null) {
+                        val novaFoto = FotoDados(
+                            uriString = uri.toString(),
+                            titulo = name,
+                            data = dataDia,
+                            latitude = ultimaLocal?.latitude ?: 0.0 ,
+                            longitude = ultimaLocal?.longitude ?: 0.0
+                        )
+                        viewModel.adicionarFotos(novaFoto)
+                        Toast.makeText(requireContext(), "Foto guardada com localização!", Toast.LENGTH_SHORT).show()
                     } else {
-
-                        val novaFoto = FotoDados(uri.toString(), name, name, 0.0, 0.0)
+                        val novaFoto = FotoDados(uri.toString(), name, dataDia, null, null)
                         viewModel.adicionarFotos(novaFoto)
                         Toast.makeText(requireContext(), "Foto guardada (sem GPS).", Toast.LENGTH_SHORT).show()
                     }
-
                 }
             }
         )
     }
 
+    private fun rastrearGPS(){
+        if(ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
+            return
+        }
+
+        try{
+            //obter localização em cache caso exista para ser mais rápido
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                if(location != null){
+                    ultimaLocal = location
+                }
+            }
+
+            //fazer pedidos constantes de atualização da localização
+            val locationRequest = LocationRequest.Builder(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                5000
+            ).apply {
+                setMinUpdateDistanceMeters(5.0f)
+            }.build()
+
+            fusedLocationClient.requestLocationUpdates(
+                locationRequest,
+                locationCallback,
+                Looper.getMainLooper()
+            )
+
+        }catch (e: Exception){
+            Log.e("GPS", "Erro ao iniciar rastreio: ${e.message}")
+        }
+    }
+
+
+    /**
+     * Função para verificar se o gps está ativo no sistema
+     */
+    private fun verificarGpsRastrear(){
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000).build()
+        val builder = LocationSettingsRequest.Builder().addLocationRequest(locationRequest)
+        val cliente = LocationServices.getSettingsClient(requireContext())
+        val task = cliente.checkLocationSettings(builder.build())
+
+        task.addOnSuccessListener { 
+            rastrearGPS() 
+        }
+
+        task.addOnFailureListener { exception ->
+            if (exception is ResolvableApiException) {
+                try {
+                    // Aqui é onde o pop-up de "Ativar GPS" é gerado
+                    val intentSenderRequest = IntentSenderRequest.Builder(exception.resolution).build()
+                    gpsAtivo.launch(intentSenderRequest)
+                } catch (e: Exception) {
+                    Log.e("GPS", "Erro ao tentar mostrar o diálogo de GPS", e)
+                }
+            }
+        }
+    }
+
+
     override fun onResume() {
         super.onResume()
-        // Inicia a câmara apenas quando o fragmento fica visível (Resumed)
         verificarPermissaoEIniciarCamara()
     }
 
     override fun onPause() {
         super.onPause()
-        // Desativa a câmara explicitamente ao sair do fragmento
         desativarCamara()
+        // Parar atualizações de localização para poupar bateria
+        fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 
     override fun onDestroyView() {

@@ -17,7 +17,7 @@ import org.maplibre.android.plugins.annotation.SymbolOptions
 import androidx.core.graphics.scale
 import pt.ipt.dam2025.phototravel.BuildConfig.API_KEY
 import androidx.core.net.toUri
-import pt.ipt.dam2025.phototravel.PartilhaDadosViewModel
+import pt.ipt.dam2025.phototravel.viewmodel.PartilhaDadosViewModel
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Observer
 import org.maplibre.android.maps.MapLibreMap
@@ -84,18 +84,21 @@ class MapaFragmento : Fragment() {
 
                     for (foto in listaDeFotos) {
 
+
                         val bitmapIcone: Bitmap? = carregarFotos(requireContext(), foto.uriString)
 
                         if(bitmapIcone != null) {
                             val idImagem: String = "img_${foto.titulo}"
                             estilo.addImage(idImagem, bitmapIcone)
 
-                            pinManager.create(
+                            if((foto.latitude != null) && (foto.longitude != null)){
+                                pinManager.create(
                                 SymbolOptions()
                                     .withLatLng(LatLng(foto.latitude,foto.longitude))
                                     .withIconImage(idImagem)
                                     .withIconSize(0.5f)
-                            )
+                                )
+                            }
 
                         }
                     }
@@ -120,7 +123,7 @@ class MapaFragmento : Fragment() {
             val localizacao = ImageDecoder.createSource(contentResolver, uri)
             val bitmapOriginal = ImageDecoder.decodeBitmap(localizacao)
 
-            return bitmapOriginal.scale(150, 150, false)
+            return bitmapOriginal.scale(200, 200, false)
 
         }catch (e: Exception){
             val msg = "Erro ao carregar imagem do dispositivo "

@@ -11,10 +11,10 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.lifecycle.Observer
 import androidx.fragment.app.activityViewModels
-import pt.ipt.dam2025.phototravel.ColecaoDados
-import pt.ipt.dam2025.phototravel.ColecoesAdapter
+import pt.ipt.dam2025.phototravel.modelos.ColecaoDados
+import pt.ipt.dam2025.phototravel.adaptadores.ColecoesAdapter
 import pt.ipt.dam2025.phototravel.DetalheColecaoActivity
-import pt.ipt.dam2025.phototravel.PartilhaDadosViewModel
+import pt.ipt.dam2025.phototravel.viewmodel.PartilhaDadosViewModel
 
 class ColecoesFragmento : Fragment() {
 

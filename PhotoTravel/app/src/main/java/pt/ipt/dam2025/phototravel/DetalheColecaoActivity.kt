@@ -10,6 +10,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.lifecycle.Observer
+import pt.ipt.dam2025.phototravel.adaptadores.FotosAdapter
+import pt.ipt.dam2025.phototravel.viewmodel.PartilhaDadosViewModel
 
 class DetalheColecaoActivity : AppCompatActivity() {
 
