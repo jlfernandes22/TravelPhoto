@@ -112,7 +112,7 @@ class MapaFragmento : Fragment() {
     /**
      * Função para carregar foto do dispositivo
      */
-    fun carregarFotos(context: android.content.Context, uriString: String): Bitmap? {
+    private fun carregarFotos(context: android.content.Context, uriString: String): Bitmap? {
 
         try{
             val uri = uriString.toUri()

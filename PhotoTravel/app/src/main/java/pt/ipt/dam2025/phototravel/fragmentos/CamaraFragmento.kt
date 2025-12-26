@@ -54,7 +54,13 @@ class CamaraFragmento : Fragment() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
     private var ultimaLocal: Location? = null
+    
+    // Variável para evitar o loop infinito do diálogo de GPS
+    private var gpsDialogJaSolicitado = false
 
+    /**
+     * Callback para receber as atualizações de localização
+     */
     private val locationCallback = object : LocationCallback(){
         override fun onLocationResult(result: LocationResult) {
             ultimaLocal = result.lastLocation
@@ -62,6 +68,9 @@ class CamaraFragmento : Fragment() {
         }
     }
 
+    /**
+     * Launcher para ativar o GPS
+     */
     private val gpsAtivo = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
@@ -69,11 +78,14 @@ class CamaraFragmento : Fragment() {
             // O utilizador aceitou ligar o GPS! Iniciamos o rastreio.
             rastrearGPS()
         } else {
-            // O utilizador recusou.
+            // O utilizador recusou. A flag impede que o onResume peça novamente.
             Toast.makeText(requireContext(), "GPS necessário para guardar localização nas fotos.", Toast.LENGTH_SHORT).show()
         }
     }
 
+    /**
+     * Launcher para solicitar permissões
+     */
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -238,6 +250,9 @@ class CamaraFragmento : Fragment() {
         )
     }
 
+    /**
+     * Função para rastrear a localização
+     */
     private fun rastrearGPS(){
         if(ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
             return
@@ -285,9 +300,10 @@ class CamaraFragmento : Fragment() {
         }
 
         task.addOnFailureListener { exception ->
-            if (exception is ResolvableApiException) {
+            // Só pedimos para ativar se ainda não tivermos perguntado nesta "sessão"
+            if (exception is ResolvableApiException && !gpsDialogJaSolicitado) {
                 try {
-                    // Aqui é onde o pop-up de "Ativar GPS" é gerado
+                    gpsDialogJaSolicitado = true
                     val intentSenderRequest = IntentSenderRequest.Builder(exception.resolution).build()
                     gpsAtivo.launch(intentSenderRequest)
                 } catch (e: Exception) {
